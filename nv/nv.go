@@ -26,3 +26,7 @@ func (nv *NV) CheckState() {
 func (nv *NV) Available() bool {
 	return nv.status == tpm.Success
 }
+
+func (nv *NV) IndexCacheInit() {
+	panic("not yet")
+}

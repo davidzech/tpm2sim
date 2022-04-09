@@ -2,22 +2,35 @@ package tpm
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
-type RC uint32
+type CC uint32
 
-type rcErr RC
-
-func (rcErr) Error() string {
-	return ""
+func (c CC) CommandIndex() CommandIndex {
+	panic("not yet")
 }
 
-func (rc RC) ToError() error {
+type CommandIndex uint16
+
+type RC uint32
+
+type RCError RC
+
+func (r RCError) Error() string {
+	return fmt.Sprintf("tpm rc: %d", int(r))
+}
+
+func (r RCError) RC() RC {
+	return RC(r)
+}
+
+func (rc RC) AsErr() error {
 	if rc != Success {
 		return nil
 	}
-	return (rcErr(rc))
+	return (RCError(rc))
 }
 
 type Handle uint32
@@ -25,6 +38,17 @@ type Handle uint32
 type RH Handle
 
 type ST uint16
+
+func (s *ST) Unmarshal(r io.Reader) error {
+	// read uint16 out of buf
+	var u16 *uint16 = (*uint16)(s)
+	err := binary.Read(r, binary.BigEndian, u16)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 type Object struct {
 	Foo any
@@ -49,13 +73,17 @@ func HandleToObject(handle Handle) AnyObject {
 }
 
 type Unmarshaler interface {
-	Unmarshal(r io.Reader) error
+	UnmarshalTPM(r io.Reader) error
 }
 
 func Unmarshal(r io.Reader, v any) error {
 	if unmarshaler, ok := v.(Unmarshaler); ok {
-		return unmarshaler.Unmarshal(r)
+		return unmarshaler.UnmarshalTPM(r)
 	}
 
 	return binary.Read(r, binary.BigEndian, v)
+}
+
+type Marshaler interface {
+	MarshalTPM(io.Writer) error
 }

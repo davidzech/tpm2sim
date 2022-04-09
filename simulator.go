@@ -1,42 +1,17 @@
 package tpm2sim
 
 import (
-	"bytes"
-	"io"
-
 	"github.com/davidzech/tpm2sim/fail"
 	"github.com/davidzech/tpm2sim/nv"
 	"github.com/davidzech/tpm2sim/ram"
 	"github.com/davidzech/tpm2sim/time"
 	"github.com/davidzech/tpm2sim/tpm"
-	"github.com/davidzech/tpm2sim/tpmi"
 )
 
 type Simulator struct {
 	nv    *nv.NV
 	ram   *ram.RAM
 	clock *time.Clock
-}
-
-type Command struct {
-	io.Reader
-	tag  tpmi.STCommandTag
-	size uint32
-}
-
-func NewCommand(buffer []byte) (*Command, error) {
-	c := &Command{
-		Reader: bytes.NewReader(buffer),
-	}
-
-	if err := tpm.Unmarshal(c, &c.tag); err != nil {
-		return nil, err
-	}
-
-	if err := tpm.Unmarshal(c, &c.size); err != nil {
-		return nil, err
-	}
-
 }
 
 // ExecuteCommand
@@ -116,12 +91,39 @@ func (s *Simulator) ExecuteCommand(request []byte) (response []byte) {
 	// 	&command.parameterBuffer,
 	// 	&command.parameterSize)
 
-	command := NewCommand(request)
+	resp, err := s.execCommand(request)
+	if err != nil {
+
+	}
 
 	// Parse command header: tag, commandSize and command.code.
 	// First parse the tag. The unmarshaling routine will validate
 	// that it is either TPM_ST_SESSIONS or TPM_ST_NO_SESSIONS.
 	return
+}
+
+func (s *Simulator) execCommand(request []byte) ([]byte, error) {
+	command, err := NewCommand(request)
+	if err != nil {
+		return nil, err
+	}
+	// TODO: Implement Field Upgrade Mode
+
+	if (!s.Started() && command.Code != tpm.Startup) || (s.Started() && command.Code == tpm.Startup) {
+		return nil, tpm.ErrInitialize
+	}
+
+	s.nv.IndexCacheInit()
+
+	handleBuffer, err := command.ParseHandleBuffer()
+	if err != nil {
+		return nil, err
+	}
+
+}
+
+func (s *Simulator) Started() bool {
+	panic("not yet")
 }
 
 // ObjectTerminateEvent
