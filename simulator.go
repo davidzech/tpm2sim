@@ -1,17 +1,26 @@
 package tpm2sim
 
 import (
+	"bytes"
+
+	"encoding/binary"
+
 	"github.com/davidzech/tpm2sim/fail"
 	"github.com/davidzech/tpm2sim/nv"
 	"github.com/davidzech/tpm2sim/ram"
 	"github.com/davidzech/tpm2sim/time"
 	"github.com/davidzech/tpm2sim/tpm"
+	"github.com/davidzech/tpm2sim/tpm/cc"
+	"github.com/davidzech/tpm2sim/tpm/rc"
+	"github.com/davidzech/tpm2sim/tpm/rh"
+	"github.com/davidzech/tpm2sim/tpm/st"
 )
 
 type Simulator struct {
-	nv    *nv.NV
-	ram   *ram.RAM
-	clock *time.Clock
+	nv                *nv.NV
+	ram               *ram.RAM
+	clock             *time.Clock
+	commandAttributes map[commandIndex]any
 }
 
 // ExecuteCommand
@@ -51,7 +60,7 @@ type Simulator struct {
 // will SET g_inFailureMode and call _plat__Fail(). That function should not return
 // but may call ExecuteCommand().
 //
-func (s *Simulator) ExecuteCommand(request []byte) (response []byte) {
+func (s *Simulator) ExecuteCommand(request, response []byte) {
 
 	s.ram.UpdateNV = ram.UpdateTypeNone
 	s.ram.ClearOrderly = false
@@ -80,7 +89,7 @@ func (s *Simulator) ExecuteCommand(request []byte) (response []byte) {
 	// _TPM_Hash_Data/_TPM_Hash_End sequence.
 	// TODO: rename these symbols
 
-	if tpm.RH(s.ram.DRTMHandle) != tpm.Unassigned {
+	if tpm.RH(s.ram.DRTMHandle) != rh.Unassigned {
 		s.objectTerminateEvent()
 	}
 
@@ -91,10 +100,14 @@ func (s *Simulator) ExecuteCommand(request []byte) (response []byte) {
 	// 	&command.parameterBuffer,
 	// 	&command.parameterSize)
 
-	resp, err := s.execCommand(request)
-	if err != nil {
+	if err := s.execCommand(request, response); err != nil {
+
+	} else {
 
 	}
+
+	//TODO: figure out global state things and how to return response
+	// if s.ram.ClearOrderly &&
 
 	// Parse command header: tag, commandSize and command.code.
 	// First parse the tag. The unmarshaling routine will validate
@@ -102,24 +115,53 @@ func (s *Simulator) ExecuteCommand(request []byte) (response []byte) {
 	return
 }
 
-func (s *Simulator) execCommand(request []byte) ([]byte, error) {
+func (s *Simulator) execCommand(request, response []byte) error {
 	command, err := NewCommand(request)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// TODO: Implement Field Upgrade Mode
 
-	if (!s.Started() && command.Code != tpm.Startup) || (s.Started() && command.Code == tpm.Startup) {
-		return nil, tpm.ErrInitialize
+	if (!s.Started() && command.Code != cc.Startup) || (s.Started() && command.Code == cc.Startup) {
+		return rc.ErrInitialize
 	}
 
 	s.nv.IndexCacheInit()
 
-	handleBuffer, err := command.ParseHandleBuffer()
-	if err != nil {
-		return nil, err
+	if err := s.entityGetLoadStatus(command); err != nil {
+		return err
 	}
 
+	responseBuffer := bytes.NewBuffer(response)
+	_ = responseBuffer.Next(tpm.STDResponseHeader)
+
+	if command.Tag == st.Sessions {
+		responseBuffer.Next(binary.Size(uint32(0)))
+	}
+	if s.handleInResponse(command.index) {
+		responseBuffer.Next(binary.Size(tpm.Handle(0)))
+	}
+
+	if err := command.Dispatch(response); err != nil {
+		return err
+	}
+
+	s.buildResponseSession(command)
+
+	return nil
+}
+
+func (s *Simulator) buildResponseSession(c *Command) {
+
+}
+
+func (s *Simulator) entityGetLoadStatus(c *Command) error {
+	for _, handle := range c.Handles {
+		switch handle.Type() {
+
+		}
+	}
+	panic("not yet")
 }
 
 func (s *Simulator) Started() bool {
@@ -131,4 +173,9 @@ func (s *Simulator) Started() bool {
 // context states.
 func (s *Simulator) objectTerminateEvent() {
 
+}
+
+func (s *Simulator) handleInResponse(idx commandIndex) bool {
+	// TODO: check command Attributes
+	panic("not yet")
 }

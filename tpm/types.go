@@ -2,53 +2,37 @@ package tpm
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
+
+	"github.com/davidzech/tpm2sim/tpm/cc"
+	"github.com/davidzech/tpm2sim/tpm/hc"
+	"github.com/davidzech/tpm2sim/tpm/ht"
+	"github.com/davidzech/tpm2sim/tpm/rc"
+	"github.com/davidzech/tpm2sim/tpm/rh"
+	"github.com/davidzech/tpm2sim/tpm/st"
 )
-
-type CC uint32
-
-func (c CC) CommandIndex() CommandIndex {
-	panic("not yet")
-}
-
-type CommandIndex uint16
-
-type RC uint32
-
-type RCError RC
-
-func (r RCError) Error() string {
-	return fmt.Sprintf("tpm rc: %d", int(r))
-}
-
-func (r RCError) RC() RC {
-	return RC(r)
-}
-
-func (rc RC) AsErr() error {
-	if rc != Success {
-		return nil
-	}
-	return (RCError(rc))
-}
 
 type Handle uint32
 
-type RH Handle
-
-type ST uint16
-
-func (s *ST) Unmarshal(r io.Reader) error {
-	// read uint16 out of buf
-	var u16 *uint16 = (*uint16)(s)
-	err := binary.Read(r, binary.BigEndian, u16)
-	if err != nil {
-		return err
-	}
-
-	return nil
+func (h Handle) Type() HT {
+	return HT((h & hc.HRRangeMask) >> hc.HRShift)
 }
+
+type AuthRole uint32
+
+const (
+	AuthNone AuthRole = iota
+	AuthUser
+	AuthAdmin
+	AuthDup
+)
+
+type CC = cc.CC
+type RC = rc.RC
+type ST = st.ST
+type HC = hc.HC
+type HT = ht.HT
+type RH = rh.RH
 
 type Object struct {
 	Foo any
